@@ -3,6 +3,8 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  printer_plus
+  printing
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
