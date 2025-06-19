@@ -19,17 +19,33 @@ class NetworkPrinter {
     String title, {
     Function(bool success)? onPrinted,
   }) async {
+    return await printToNetworkPrinterWithIP(
+      content,
+      title,
+      printerIP,
+      onPrinted: onPrinted,
+    );
+  }
+
+  static Future<bool> printToNetworkPrinterWithIP(
+    String content,
+    String title,
+    String ip, {
+    Function(bool success)? onPrinted,
+    int copyNumber = 1,
+    int totalCopies = 1,
+  }) async {
     try {
-      print('🖨️ Conectando a impresora en $printerIP:$printerPort');
+      print('🖨️ Conectando a impresora en $ip:$printerPort');
 
       // Crear socket para conectar a la impresora
       final socket = await Socket.connect(
-        printerIP,
+        ip,
         printerPort,
         timeout: const Duration(seconds: 10),
       );
 
-      print('✅ Conexión establecida con la impresora');
+      print('✅ Conexión establecida con la impresora $ip');
 
       // Preparar comandos ESC/POS para la impresora
       final List<int> commands = [];
@@ -45,10 +61,17 @@ class NetworkPrinter {
       commands.addAll(utf8.encode('$title\n'));
       commands.addAll([0x1B, 0x45, 0x00]); // ESC E 0 - Bold off
 
+      // Información de copias si hay más de una
+      if (totalCopies > 1) {
+        commands.addAll([0x1B, 0x61, 0x00]); // ESC a 0 - Left alignment
+        commands.addAll(utf8.encode('Copia $copyNumber de $totalCopies\n'));
+      }
+
       // Fecha
       commands.addAll([0x1B, 0x61, 0x00]); // ESC a 0 - Left alignment
       commands.addAll(utf8.encode('Fecha: ${DateTime.now().toString()}\n'));
       commands.addAll(utf8.encode('Impreso desde Flutter WebView\n'));
+      commands.addAll(utf8.encode('Impresora: $ip\n'));
 
       // Línea separadora arriba
       commands.addAll(utf8.encode('${'=' * 30}\n'));
@@ -71,11 +94,11 @@ class NetworkPrinter {
       // Cerrar conexión
       await socket.close();
 
-      print('✅ Documento enviado exitosamente a la impresora');
+      print('✅ Documento enviado exitosamente a la impresora $ip');
       if (onPrinted != null) onPrinted(true);
       return true;
     } catch (e) {
-      print('❌ Error al conectar con la impresora: $e');
+      print('❌ Error al conectar con la impresora $ip: $e');
       if (onPrinted != null) onPrinted(false);
       return false;
     }
@@ -123,6 +146,8 @@ class WebViewScreen extends StatefulWidget {
 
 class _WebViewScreenState extends State<WebViewScreen> {
   late final WebViewController _controller;
+  bool _isPrinting = false; // Control para evitar impresiones múltiples
+  DateTime? _lastPrintTime; // Control de tiempo entre impresiones
 
   @override
   void initState() {
@@ -178,6 +203,15 @@ class _WebViewScreenState extends State<WebViewScreen> {
           if (printButton) {
             console.log('🔍 Botón de imprimir encontrado:', printButton);
             
+            // Verificar si ya está interceptado
+            if (printButton.hasAttribute('data-intercepted')) {
+              console.log('✅ Botón ya interceptado, saltando...');
+              return;
+            }
+            
+            // Marcar como interceptado
+            printButton.setAttribute('data-intercepted', 'true');
+            
             // Guardar el onclick original
             const originalOnClick = printButton.onclick;
             const originalOnClickAttr = printButton.getAttribute('onclick');
@@ -226,8 +260,11 @@ class _WebViewScreenState extends State<WebViewScreen> {
             for (let selector of fallbackSelectors) {
               try {
                 const fallbackButton = document.querySelector(selector);
-                if (fallbackButton) {
+                if (fallbackButton && !fallbackButton.hasAttribute('data-intercepted')) {
                   console.log('🔍 Botón de imprimir encontrado por fallback:', fallbackButton);
+                  
+                  // Marcar como interceptado
+                  fallbackButton.setAttribute('data-intercepted', 'true');
                   
                   const originalOnClick = fallbackButton.onclick;
                   const originalOnClickAttr = fallbackButton.getAttribute('onclick');
@@ -301,10 +338,12 @@ class _WebViewScreenState extends State<WebViewScreen> {
             const printData = {
               content: content || '',
               title: title || 'Documento',
-              timestamp: new Date().toISOString()
+              url: window.location.href,
+              timestamp: new Date().toISOString(),
+              source: 'WebView'
             };
             
-            console.log('🖨️ Enviando datos para impresión directa:', printData);
+            console.log('🖨️ Enviando datos para impresión directa desde WebView:', printData);
             DirectPrint.postMessage(JSON.stringify(printData));
           } catch (error) {
             console.error('Error al preparar datos para impresión directa:', error);
@@ -322,6 +361,45 @@ class _WebViewScreenState extends State<WebViewScreen> {
             console.error('Textarea no encontrado');
           }
         }
+        
+        // Detectar si estamos en WebView
+        function detectWebView() {
+          const isWebView = window.navigator.userAgent.includes('WebView') || 
+                           window.navigator.userAgent.includes('Flutter') ||
+                           typeof PrintInterceptor !== 'undefined' ||
+                           typeof NativePrinter !== 'undefined' ||
+                           typeof DirectPrint !== 'undefined';
+          
+          if (isWebView) {
+            console.log('🌐 Detectado: Ejecutando en WebView de Flutter');
+            document.body.classList.add('webview-mode');
+            
+            // Agregar indicador visual de WebView
+            const webviewIndicator = document.createElement('div');
+            webviewIndicator.id = 'webview-indicator';
+            webviewIndicator.innerHTML = '🌐 WebView Mode';
+            webviewIndicator.style.cssText = `
+              position: fixed;
+              top: 10px;
+              right: 10px;
+              background: #667eea;
+              color: white;
+              padding: 4px 8px;
+              border-radius: 4px;
+              font-size: 12px;
+              z-index: 1000;
+              pointer-events: none;
+            `;
+            document.body.appendChild(webviewIndicator);
+          } else {
+            console.log('🌐 No detectado: Ejecutando en navegador normal');
+          }
+          
+          return isWebView;
+        }
+        
+        // Ejecutar detección de WebView
+        detectWebView();
         
         // Interceptar window.print() también
         const originalPrint = window.print;
@@ -351,14 +429,33 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
   Future<void> _handleNativePrint(String message) async {
     try {
+      // Verificar si se puede imprimir
+      if (!await _canPrint()) {
+        return;
+      }
+
+      // Marcar como imprimiendo
+      await _setPrintingStatus(true);
+
       final Map<String, dynamic> printData = json.decode(message);
       final String html = printData['html'] ?? '';
       final String title = printData['title'] ?? 'Documento';
       final String url = printData['url'] ?? '';
       final String textContent = printData['textContent'] ?? '';
 
+      // Obtener información del WebView
+      final bool isWebView = await _isWebViewMode();
+      final Map<String, dynamic> webViewInfo = await _getWebViewInfo();
+
+      // Obtener configuración de impresoras
+      final List<Map<String, dynamic>> printers = await _getPrintersConfig();
+
       print('🖨️ Procesando impresión nativa para: $title');
       print('📝 Contenido del textarea recibido: "$textContent"');
+      print('🌐 Detectado: Impresión desde WebView (URL: $url)');
+      print('🌐 Modo WebView: $isWebView');
+      print('🌐 Info WebView: $webViewInfo');
+      print('🖨️ Impresoras configuradas: $printers');
 
       // Obtener el contenido actual del textarea en tiempo real
       final String currentTextContent = await _getTextareaContent();
@@ -378,25 +475,123 @@ class _WebViewScreenState extends State<WebViewScreen> {
             duration: Duration(seconds: 3),
           ),
         );
+        await _setPrintingStatus(false);
         return;
       }
 
-      // Mostrar diálogo de confirmación de impresión
+      // Si viene desde WebView, imprimir directamente sin diálogo
+      if (isWebView) {
+        print(
+          '🌐 Imprimiendo directamente desde WebView sin diálogo de confirmación',
+        );
+
+        // Mostrar notificación de que se está imprimiendo
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.web, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Imprimiendo desde WebView: $title')),
+              ],
+            ),
+            backgroundColor: Colors.blue,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
+        // Usar configuración de impresoras múltiples
+        await _printToMultiplePrinters(finalContent, title);
+
+        // Notificar a la web para actualizar el historial
+        await _notifyWebPrintHistory(finalContent);
+
+        // Limpiar el textarea después de la impresión exitosa
+        await _clearTextarea();
+
+        // Forzar actualización visual
+        await _forceTextareaUpdate();
+
+        // Marcar como no imprimiendo
+        await _setPrintingStatus(false);
+
+        return;
+      }
+
+      // Solo mostrar diálogo si NO viene desde WebView (caso de uso nativo)
       final bool? shouldPrint = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (BuildContext context) {
           return AlertDialog(
-            title: const Text('Confirmar Impresión'),
+            title: Row(
+              children: [
+                const Icon(Icons.web, color: Colors.blue),
+                const SizedBox(width: 8),
+                const Text('Confirmar Impresión desde WebView'),
+              ],
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('¿Desea imprimir "$title"?'),
                 const SizedBox(height: 8),
-                const Text(
-                  'Impresora: 192.168.1.13:9100',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '🌐 Origen: WebView de Flutter',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                      Text('URL: $url', style: const TextStyle(fontSize: 12)),
+                      Text(
+                        'User Agent: ${webViewInfo['userAgent'] ?? 'N/A'}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const Text(
+                        'Impresora: 192.168.1.13:9100',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 8),
+                      if (printers.isNotEmpty) ...[
+                        const Text(
+                          '🖨️ Impresoras configuradas:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        ...printers.map(
+                          (printer) => Text(
+                            '  • ${printer['ip']} - ${printer['copies']} copia(s)',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        const Text(
+                          '🖨️ Usando impresora por defecto: 192.168.1.13:9100',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 8),
                 const Text(
@@ -426,7 +621,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
               ElevatedButton.icon(
                 onPressed: () => Navigator.of(context).pop(true),
                 icon: const Icon(Icons.print),
-                label: const Text('Imprimir'),
+                label: const Text('Imprimir desde WebView'),
               ),
             ],
           );
@@ -457,6 +652,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
               duration: Duration(seconds: 3),
             ),
           );
+          await _setPrintingStatus(false);
           return;
         }
 
@@ -468,41 +664,23 @@ class _WebViewScreenState extends State<WebViewScreen> {
           ),
         );
 
-        final bool printSuccess = await NetworkPrinter.printToNetworkPrinter(
-          finalContent,
-          title,
-        );
+        // Usar configuración de impresoras múltiples
+        await _printToMultiplePrinters(finalContent, title);
 
-        if (printSuccess) {
-          print('✅ Documento impreso exitosamente en la impresora de red');
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Documento enviado a impresora exitosamente'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 3),
-            ),
-          );
+        // Notificar a la web para actualizar el historial
+        await _notifyWebPrintHistory(finalContent);
 
-          // Notificar a la web para actualizar el historial
-          await _notifyWebPrintHistory(finalContent);
+        // Limpiar el textarea después de la impresión exitosa
+        await _clearTextarea();
 
-          // Limpiar el textarea después de la impresión exitosa
-          await _clearTextarea();
+        // Forzar actualización visual
+        await _forceTextareaUpdate();
 
-          // Forzar actualización visual
-          await _forceTextareaUpdate();
-        } else {
-          print('❌ Error al imprimir en la impresora de red');
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Error al enviar documento a la impresora'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 3),
-            ),
-          );
-        }
+        // Marcar como no imprimiendo
+        await _setPrintingStatus(false);
       } else {
         print('❌ Impresión cancelada por el usuario');
+        await _setPrintingStatus(false);
       }
     } catch (e) {
       print('❌ Error al procesar impresión nativa: $e');
@@ -512,43 +690,68 @@ class _WebViewScreenState extends State<WebViewScreen> {
           backgroundColor: Colors.red,
         ),
       );
+      await _setPrintingStatus(false);
     }
   }
 
   Future<void> _handleDirectPrint(String message) async {
     try {
+      // Verificar si se puede imprimir
+      if (!await _canPrint()) {
+        return;
+      }
+
+      // Marcar como imprimiendo
+      await _setPrintingStatus(true);
+
       final Map<String, dynamic> printData = json.decode(message);
       final String content = printData['content'] ?? '';
       final String title = printData['title'] ?? 'Documento';
+      final String url = printData['url'] ?? 'WebView';
 
       print('🖨️ Procesando impresión directa para: $title');
       print('📝 Contenido a imprimir: "$content"');
+      print('🌐 Detectado: Impresión directa desde WebView (URL: $url)');
 
       // Si no hay contenido, mostrar advertencia y salir
       if (content.isEmpty) {
         print('⚠️ No hay contenido para imprimir');
+        await _setPrintingStatus(false);
         return;
       }
 
-      // Enviar directamente a la impresora sin confirmación
-      final bool printSuccess = await NetworkPrinter.printToNetworkPrinter(
-        content,
-        title,
+      // Mostrar notificación de que se está imprimiendo
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.web, color: Colors.white),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Imprimiendo desde WebView: $title')),
+            ],
+          ),
+          backgroundColor: Colors.blue,
+          duration: const Duration(seconds: 2),
+        ),
       );
 
-      if (printSuccess) {
-        print('✅ Documento impreso exitosamente en la impresora de red');
+      // Enviar directamente a la impresora sin confirmación
+      await _printToMultiplePrinters(content, title);
 
-        // Notificar a la web para actualizar el historial
-        await _notifyWebPrintHistory(content);
+      // Notificar a la web para actualizar el historial
+      await _notifyWebPrintHistory(content);
 
-        // Limpiar el textarea después de la impresión exitosa
-        await _clearTextarea();
-      } else {
-        print('❌ Error al imprimir en la impresora de red');
-      }
+      // Limpiar el textarea después de la impresión exitosa
+      await _clearTextarea();
+
+      // Forzar actualización visual
+      await _forceTextareaUpdate();
+
+      // Marcar como no imprimiendo
+      await _setPrintingStatus(false);
     } catch (e) {
-      print('❌ Error al procesar impresión directa: $e');
+      print('❌ Error al procesar impresión directa desde WebView: $e');
+      await _setPrintingStatus(false);
     }
   }
 
@@ -861,6 +1064,205 @@ class _WebViewScreenState extends State<WebViewScreen> {
       print('📝 Textarea forzado actualizado exitosamente: $result');
     } catch (e) {
       print('❌ Error al forzar actualización del textarea: $e');
+    }
+  }
+
+  Future<bool> _isWebViewMode() async {
+    try {
+      final String script = '''
+        (function() {
+          return typeof PrintInterceptor !== 'undefined' || 
+                 typeof NativePrinter !== 'undefined' || 
+                 typeof DirectPrint !== 'undefined' ||
+                 window.navigator.userAgent.includes('WebView') ||
+                 window.navigator.userAgent.includes('Flutter');
+        })();
+      ''';
+
+      final result = await _controller.runJavaScriptReturningResult(script);
+      return result == true;
+    } catch (e) {
+      print('❌ Error detectando modo WebView: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> _getWebViewInfo() async {
+    try {
+      final String script = '''
+        (function() {
+          const info = {
+            userAgent: window.navigator.userAgent,
+            url: window.location.href,
+            title: document.title,
+            hasPrintInterceptor: typeof PrintInterceptor !== 'undefined',
+            hasNativePrinter: typeof NativePrinter !== 'undefined',
+            hasDirectPrint: typeof DirectPrint !== 'undefined',
+            isWebView: window.navigator.userAgent.includes('WebView') || 
+                      window.navigator.userAgent.includes('Flutter')
+          };
+          return JSON.stringify(info);
+        })();
+      ''';
+
+      final result = await _controller.runJavaScriptReturningResult(script);
+      if (result is String) {
+        return json.decode(result);
+      }
+      return {};
+    } catch (e) {
+      print('❌ Error obteniendo información del WebView: $e');
+      return {};
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _getPrintersConfig() async {
+    try {
+      final String script = '''
+        (function() {
+          const printers = [];
+          const printerRows = document.querySelectorAll('.printer-row');
+          
+          printerRows.forEach(function(row) {
+            const ipInput = row.querySelector('.printer-ip');
+            const copiesInput = row.querySelector('.printer-copies');
+            
+            if (ipInput && copiesInput) {
+              const ip = ipInput.value.trim();
+              const copies = parseInt(copiesInput.value) || 1;
+              
+              if (ip) {
+                printers.push({
+                  ip: ip,
+                  copies: copies
+                });
+              }
+            }
+          });
+          
+          console.log('🖨️ Configuración de impresoras detectada:', printers);
+          return JSON.stringify(printers);
+        })();
+      ''';
+
+      final result =
+          await _controller.runJavaScriptReturningResult(script) as String;
+      final List<dynamic> printersList = json.decode(result);
+
+      return printersList.map((printer) {
+        return {
+          'ip': printer['ip'] as String,
+          'copies': printer['copies'] as int,
+        };
+      }).toList();
+    } catch (e) {
+      print('❌ Error obteniendo configuración de impresoras: $e');
+      return [];
+    }
+  }
+
+  Future<void> _printToMultiplePrinters(String content, String title) async {
+    try {
+      final List<Map<String, dynamic>> printers = await _getPrintersConfig();
+
+      if (printers.isEmpty) {
+        print(
+          '⚠️ No se encontraron impresoras configuradas, usando impresora por defecto',
+        );
+        // Usar impresora por defecto
+        await NetworkPrinter.printToNetworkPrinter(content, title);
+        return;
+      }
+
+      print(
+        '🖨️ Imprimiendo en ${printers.length} impresora(s) configurada(s)',
+      );
+
+      int successCount = 0;
+      int totalCopies = 0;
+
+      for (final printer in printers) {
+        final String ip = printer['ip'];
+        final int copies = printer['copies'];
+
+        print('🖨️ Imprimiendo en $ip - $copies copia(s)');
+
+        // Imprimir las copias especificadas
+        for (int i = 0; i < copies; i++) {
+          final bool success = await NetworkPrinter.printToNetworkPrinterWithIP(
+            content,
+            title,
+            ip,
+            copyNumber: i + 1,
+            totalCopies: copies,
+          );
+
+          if (success) {
+            successCount++;
+            totalCopies++;
+            print('✅ Copia ${i + 1} de $copies impresa exitosamente en $ip');
+          } else {
+            print('❌ Error imprimiendo copia ${i + 1} de $copies en $ip');
+          }
+
+          // Pequeña pausa entre copias
+          if (i < copies - 1) {
+            await Future.delayed(const Duration(milliseconds: 500));
+          }
+        }
+      }
+
+      print(
+        '📊 Resumen: $successCount copias impresas exitosamente de $totalCopies total',
+      );
+
+      // Mostrar notificación de resumen
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '✅ Impresión completada: $successCount copias en ${printers.length} impresora(s)',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      print('❌ Error en impresión múltiple: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('❌ Error en impresión múltiple: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+  Future<bool> _canPrint() async {
+    // Evitar impresiones múltiples simultáneas
+    if (_isPrinting) {
+      print('⚠️ Impresión en progreso, ignorando nueva solicitud');
+      return false;
+    }
+
+    // Evitar impresiones muy rápidas (más de una por segundo)
+    if (_lastPrintTime != null) {
+      final timeDiff = DateTime.now().difference(_lastPrintTime!);
+      if (timeDiff.inMilliseconds < 1000) {
+        print(
+          '⚠️ Impresión muy reciente (${timeDiff.inMilliseconds}ms), ignorando',
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  Future<void> _setPrintingStatus(bool isPrinting) async {
+    _isPrinting = isPrinting;
+    if (isPrinting) {
+      _lastPrintTime = DateTime.now();
     }
   }
 
