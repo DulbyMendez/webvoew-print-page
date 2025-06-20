@@ -40,6 +40,7 @@ dependencies:
   http: ^1.1.0
   socket_io_client: ^2.0.3+1
   printer_plus: ^1.0.0
+  esc_pos_utils_plus: ^2.0.4
 
 dev_dependencies:
   flutter_test:

@@ -8,6 +8,8 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
+
 // Clase para manejar la conexión con impresoras de red
 class NetworkPrinter {
   static const String printerIP = '192.168.1.13';
@@ -38,6 +40,58 @@ class NetworkPrinter {
     try {
       print('🖨️ Conectando a impresora en $ip:$printerPort');
 
+      // Cargar el perfil de la impresora para manejar las capacidades y codificación
+      final profile = await CapabilityProfile.load(name: 'default');
+      final generator = Generator(PaperSize.mm80, profile);
+      List<int> bytes = [];
+
+      // Seleccionar la página de códigos para caracteres en español
+      // PC850 (Multilingual) es una buena opción para español
+      bytes += generator.setGlobalCodeTable('CP850');
+
+      // Título en negrita, centrado y más grande
+      bytes += generator.text(
+        title,
+        styles: const PosStyles(
+          align: PosAlign.center,
+          bold: true,
+          height: PosTextSize.size2,
+          width: PosTextSize.size2,
+        ),
+      );
+      bytes += generator.emptyLines(1);
+
+      // Información de copias si hay más de una
+      if (totalCopies > 1) {
+        bytes += generator.text(
+          'Copia $copyNumber de $totalCopies',
+          styles: const PosStyles(align: PosAlign.left),
+        );
+      }
+
+      // Fecha
+      bytes += generator.text(
+        'Fecha: ${DateTime.now().toString()}',
+        styles: const PosStyles(align: PosAlign.left),
+      );
+      bytes += generator.text('Impreso desde Flutter WebView');
+      bytes += generator.text('Impresora: $ip');
+
+      // Línea separadora
+      bytes += generator.hr();
+
+      // Contenido principal (textarea)
+      if (content.isNotEmpty) {
+        bytes += generator.text(content);
+      }
+
+      // Línea separadora
+      bytes += generator.hr();
+      bytes += generator.emptyLines(1);
+
+      // Cortar el papel
+      bytes += generator.cut();
+
       // Crear socket para conectar a la impresora
       final socket = await Socket.connect(
         ip,
@@ -47,48 +101,8 @@ class NetworkPrinter {
 
       print('✅ Conexión establecida con la impresora $ip');
 
-      // Preparar comandos ESC/POS para la impresora
-      final List<int> commands = [];
-
-      // Inicializar impresora
-      commands.addAll([0x1B, 0x40]); // ESC @ - Initialize printer
-
-      // Centrar texto
-      commands.addAll([0x1B, 0x61, 0x01]); // ESC a 1 - Center alignment
-
-      // Título en negrita
-      commands.addAll([0x1B, 0x45, 0x01]); // ESC E 1 - Bold on
-      commands.addAll(utf8.encode('$title\n'));
-      commands.addAll([0x1B, 0x45, 0x00]); // ESC E 0 - Bold off
-
-      // Información de copias si hay más de una
-      if (totalCopies > 1) {
-        commands.addAll([0x1B, 0x61, 0x00]); // ESC a 0 - Left alignment
-        commands.addAll(utf8.encode('Copia $copyNumber de $totalCopies\n'));
-      }
-
-      // Fecha
-      commands.addAll([0x1B, 0x61, 0x00]); // ESC a 0 - Left alignment
-      commands.addAll(utf8.encode('Fecha: ${DateTime.now().toString()}\n'));
-      commands.addAll(utf8.encode('Impreso desde Flutter WebView\n'));
-      commands.addAll(utf8.encode('Impresora: $ip\n'));
-
-      // Línea separadora arriba
-      commands.addAll(utf8.encode('${'=' * 30}\n'));
-
-      // Contenido principal (textarea)
-      if (content.isNotEmpty) {
-        commands.addAll(utf8.encode(content + '\n'));
-      }
-
-      // Línea separadora abajo
-      commands.addAll(utf8.encode('${'=' * 30}\n'));
-
-      // Finalizar documento
-      commands.addAll([0x0C]); // Form feed
-
       // Enviar comandos a la impresora
-      socket.add(commands);
+      socket.add(bytes);
       await socket.flush();
 
       // Cerrar conexión
