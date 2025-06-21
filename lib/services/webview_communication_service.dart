@@ -143,4 +143,62 @@ class WebViewCommunicationService {
       print('❌ Error en prueba manual: $e');
     }
   }
+
+  /// Sends current print configuration to the web page.
+  Future<void> sendPrintConfiguration({
+    required String codeTable,
+    required bool normalizeCharacters,
+    required bool fullNormalization,
+  }) async {
+    try {
+      final script = '''
+        (function() {
+          // Enviar configuración de impresión a la web
+          if (typeof window.setPrintConfiguration === 'function') {
+            window.setPrintConfiguration({
+              codeTable: '$codeTable',
+              normalizeCharacters: $normalizeCharacters,
+              fullNormalization: $fullNormalization,
+              platform: 'flutter',
+              timestamp: new Date().toISOString()
+            });
+            console.log('✅ Configuración de impresión enviada a la web:', {
+              codeTable: '$codeTable',
+              normalizeCharacters: $normalizeCharacters,
+              fullNormalization: $fullNormalization
+            });
+            return true;
+          } else {
+            // Si no existe la función, crear variables globales
+            window.flutterPrintConfig = {
+              codeTable: '$codeTable',
+              normalizeCharacters: $normalizeCharacters,
+              fullNormalization: $fullNormalization,
+              platform: 'flutter',
+              timestamp: new Date().toISOString()
+            };
+            console.log('✅ Configuración de impresión guardada en variables globales');
+            return true;
+          }
+        })();
+      ''';
+
+      final result = await _controller.runJavaScriptReturningResult(script);
+      print('📋 Configuración enviada a la web: $result');
+    } catch (e) {
+      print('❌ Error enviando configuración: $e');
+    }
+  }
+
+  /// Forces WebView detection for Flutter to enable print button.
+  Future<void> forceWebViewDetection() async {
+    try {
+      final script =
+          JavaScriptInjectionService.getForceWebViewDetectionScript();
+      final result = await _controller.runJavaScriptReturningResult(script);
+      print('🔍 Resultado de forzar detección: $result');
+    } catch (e) {
+      print('❌ Error forzando detección: $e');
+    }
+  }
 }

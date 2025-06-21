@@ -102,6 +102,15 @@ class _WebViewScreenState extends State<WebViewScreen> {
         _fullNormalization = config['fullNormalization'] as bool;
       });
       print('✅ Configuración cargada: $_selectedCodeTable');
+
+      // Enviar configuración a la web después de que se inicialice el WebView
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _webViewService.sendPrintConfiguration(
+          codeTable: _selectedCodeTable,
+          normalizeCharacters: _normalizeCharacters,
+          fullNormalization: _fullNormalization,
+        );
+      });
     } catch (e) {
       print('⚠️ Error cargando configuración: $e');
     }
@@ -216,6 +225,13 @@ class _WebViewScreenState extends State<WebViewScreen> {
                 fullNormalization: fullNormalize,
               );
               print('✅ Configuración guardada: $codeTable');
+
+              // Enviar nueva configuración a la web
+              await _webViewService.sendPrintConfiguration(
+                codeTable: codeTable,
+                normalizeCharacters: normalize,
+                fullNormalization: fullNormalize,
+              );
             } catch (e) {
               print('❌ Error guardando configuración: $e');
             }
@@ -296,6 +312,21 @@ class _WebViewScreenState extends State<WebViewScreen> {
             icon: const Icon(Icons.code),
             onPressed: () => _webViewService.debugInjection(),
             tooltip: 'Depurar inyección JS',
+          ),
+          IconButton(
+            icon: const Icon(Icons.web),
+            onPressed: () => _webViewService.forceWebViewDetection(),
+            tooltip: 'Forzar detección WebView',
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_applications),
+            onPressed:
+                () => _webViewService.sendPrintConfiguration(
+                  codeTable: _selectedCodeTable,
+                  normalizeCharacters: _normalizeCharacters,
+                  fullNormalization: _fullNormalization,
+                ),
+            tooltip: 'Enviar configuración a web',
           ),
         ],
       ),

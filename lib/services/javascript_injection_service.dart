@@ -6,6 +6,18 @@ class JavaScriptInjectionService {
       (function() {
         console.log('🚀 Inicializando interceptor de impresión...');
         
+        // --- CONFIGURAR CANAL DE COMUNICACIÓN CON FLUTTER ---
+        // Configurar window.NativePrinter como alias del canal DirectPrint
+        if (typeof DirectPrint !== 'undefined') {
+          window.NativePrinter = {
+            postMessage: function(message) {
+              console.log('🔄 Redirigiendo mensaje a DirectPrint:', message);
+              DirectPrint.postMessage(message);
+            }
+          };
+          console.log('✅ window.NativePrinter configurado como alias de DirectPrint');
+        }
+        
         // --- FUNCIÓN PRINCIPAL DE IMPRESIÓN ---
         function callDirectPrint() {
           try {
@@ -93,7 +105,16 @@ class JavaScriptInjectionService {
             };
             
             console.log('➡️ Enviando datos a Flutter:', printData);
-            DirectPrint.postMessage(JSON.stringify(printData));
+            
+            // Intentar usar window.NativePrinter primero, luego DirectPrint como fallback
+            if (window.NativePrinter && window.NativePrinter.postMessage) {
+              window.NativePrinter.postMessage(JSON.stringify(printData));
+            } else if (typeof DirectPrint !== 'undefined') {
+              DirectPrint.postMessage(JSON.stringify(printData));
+            } else {
+              console.error('❌ No se encontró canal de comunicación con Flutter');
+              alert('Error: No se puede comunicar con la aplicación Flutter');
+            }
             
           } catch (error) {
             console.error('❌ Error al preparar datos para impresión:', error);
@@ -201,8 +222,61 @@ class JavaScriptInjectionService {
           }
         }
         
-        // Intentar inmediatamente y después de un delay
+        // --- INICIALIZAR ---
         tryIntercept();
+        
+        // --- FORZAR DETECCIÓN DE WEBVIEW PARA FLUTTER ---
+        function forceWebViewDetection() {
+          console.log('🔍 Forzando detección de WebView para Flutter...');
+          
+          // Simular que es un WebView de Flutter
+          window.isWebView = true;
+          window.isFlutterWebView = true;
+          window.webViewDetected = true;
+          window.webViewPlatform = 'flutter';
+          
+          // Detectar plataforma
+          if (navigator.userAgent.indexOf('iPhone') !== -1 || navigator.userAgent.indexOf('iPad') !== -1) {
+            window.isIOS = true;
+            window.isAndroid = false;
+            console.log('✅ Detectado como iOS WebView');
+          } else if (navigator.userAgent.indexOf('Android') !== -1) {
+            window.isAndroid = true;
+            window.isIOS = false;
+            console.log('✅ Detectado como Android WebView');
+          } else {
+            window.isAndroid = false;
+            window.isIOS = false;
+            console.log('⚠️ Plataforma no detectada, asumiendo WebView genérico');
+          }
+          
+          // Llamar funciones de activación si existen
+          var activationFunctions = [
+            'activatePrintButton',
+            'enablePrintButton',
+            'showPrintButton',
+            'initWebViewPrint',
+            'setupWebViewPrint'
+          ];
+          
+          for (var i = 0; i < activationFunctions.length; i++) {
+            var funcName = activationFunctions[i];
+            if (typeof window[funcName] === 'function') {
+              console.log('✅ Ejecutando ' + funcName + '...');
+              try {
+                window[funcName]();
+                console.log('✅ ' + funcName + ' ejecutada exitosamente');
+              } catch (e) {
+                console.log('❌ Error ejecutando ' + funcName + ':', e.message);
+              }
+            }
+          }
+          
+          console.log('✅ Detección de WebView forzada para Flutter');
+        }
+        
+        // Forzar detección de WebView
+        forceWebViewDetection();
         
         // También intentar cuando el DOM cambie
         const observer = new MutationObserver(function(mutations) {
@@ -218,7 +292,13 @@ class JavaScriptInjectionService {
           subtree: true
         });
         
-        console.log('🚀 Interceptor de impresión inicializado completamente.');
+        // --- EXPONER FUNCIONES GLOBALES ---
+        window.callDirectPrint = callDirectPrint;
+        window.isFlutterWebView = function() {
+          return typeof DirectPrint !== 'undefined' || typeof window.NativePrinter !== 'undefined';
+        };
+        
+        console.log('✅ Interceptor de impresión inicializado completamente');
       })();
     ''';
   }
@@ -546,6 +626,135 @@ class JavaScriptInjectionService {
   
   console.log('\\n✅ DEPURACIÓN COMPLETADA');
   return 'Depuración completada. Revisa la consola para más detalles.';
+})();
+    ''';
+  }
+
+  /// Returns JavaScript code to force WebView detection for Flutter.
+  static String getForceWebViewDetectionScript() {
+    return '''
+(function() {
+  console.log('🔍 FORZANDO DETECCIÓN DE WEBVIEW PARA FLUTTER');
+  console.log('==============================================');
+  
+  // 1. Verificar detección actual
+  console.log('1. DETECCIÓN ACTUAL:');
+  console.log('  User Agent:', navigator.userAgent);
+  console.log('  Platform:', navigator.platform);
+  console.log('  Vendor:', navigator.vendor);
+  
+  // 2. Verificar si hay funciones de detección de WebView
+  var webViewDetectionFunctions = [
+    'isWebView',
+    'detectWebView',
+    'checkWebView',
+    'isAndroidWebView',
+    'isIOSWebView',
+    'isFlutterWebView'
+  ];
+  
+  console.log('\\n2. FUNCIONES DE DETECCIÓN:');
+  for (var i = 0; i < webViewDetectionFunctions.length; i++) {
+    var funcName = webViewDetectionFunctions[i];
+    if (typeof window[funcName] === 'function') {
+      console.log('  ✅ ' + funcName + ' está definida');
+      try {
+        var result = window[funcName]();
+        console.log('    Resultado:', result);
+      } catch (e) {
+        console.log('    Error al ejecutar:', e.message);
+      }
+    } else {
+      console.log('  ❌ ' + funcName + ' NO está definida');
+    }
+  }
+  
+  // 3. Verificar variables globales de WebView
+  var webViewVariables = [
+    'isWebView',
+    'webViewDetected',
+    'isAndroid',
+    'isIOS',
+    'isFlutter',
+    'webViewPlatform'
+  ];
+  
+  console.log('\\n3. VARIABLES GLOBALES:');
+  for (var i = 0; i < webViewVariables.length; i++) {
+    var varName = webViewVariables[i];
+    if (typeof window[varName] !== 'undefined') {
+      console.log('  ✅ ' + varName + ' =', window[varName]);
+    } else {
+      console.log('  ❌ ' + varName + ' NO está definida');
+    }
+  }
+  
+  // 4. Forzar detección de Flutter WebView
+  console.log('\\n4. FORZANDO DETECCIÓN:');
+  
+  // Simular que es un WebView de Flutter
+  window.isWebView = true;
+  window.isFlutterWebView = true;
+  window.webViewDetected = true;
+  window.webViewPlatform = 'flutter';
+  
+  // Detectar plataforma
+  if (navigator.userAgent.indexOf('iPhone') !== -1 || navigator.userAgent.indexOf('iPad') !== -1) {
+    window.isIOS = true;
+    window.isAndroid = false;
+    console.log('  ✅ Detectado como iOS');
+  } else if (navigator.userAgent.indexOf('Android') !== -1) {
+    window.isAndroid = true;
+    window.isIOS = false;
+    console.log('  ✅ Detectado como Android');
+  } else {
+    window.isAndroid = false;
+    window.isIOS = false;
+    console.log('  ⚠️ Plataforma no detectada');
+  }
+  
+  // 5. Verificar si hay funciones que necesiten ser llamadas
+  var activationFunctions = [
+    'activatePrintButton',
+    'enablePrintButton',
+    'showPrintButton',
+    'initWebViewPrint',
+    'setupWebViewPrint'
+  ];
+  
+  console.log('\\n5. FUNCIONES DE ACTIVACIÓN:');
+  for (var i = 0; i < activationFunctions.length; i++) {
+    var funcName = activationFunctions[i];
+    if (typeof window[funcName] === 'function') {
+      console.log('  ✅ ' + funcName + ' está definida, ejecutando...');
+      try {
+        window[funcName]();
+        console.log('    ✅ Ejecutada exitosamente');
+      } catch (e) {
+        console.log('    ❌ Error al ejecutar:', e.message);
+      }
+    } else {
+      console.log('  ❌ ' + funcName + ' NO está definida');
+    }
+  }
+  
+  // 6. Verificar botones después de la activación
+  console.log('\\n6. VERIFICANDO BOTONES DESPUÉS DE ACTIVACIÓN:');
+  var printButtons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
+  for (var i = 0; i < printButtons.length; i++) {
+    var button = printButtons[i];
+    var text = button.textContent ? button.textContent.toLowerCase() : '';
+    if (text.indexOf('imprimir') !== -1 || text.indexOf('print') !== -1) {
+      console.log('  Botón encontrado:', button.textContent.trim());
+      console.log('    - Visible:', button.offsetParent !== null);
+      console.log('    - Habilitado:', !button.disabled);
+      console.log('    - Display:', window.getComputedStyle(button).display);
+      console.log('    - Visibility:', window.getComputedStyle(button).visibility);
+    }
+  }
+  
+  console.log('\\n✅ DETECCIÓN DE WEBVIEW FORZADA');
+  return 'Detección de WebView forzada para Flutter. Revisa la consola para más detalles.';
 })();
     ''';
   }
