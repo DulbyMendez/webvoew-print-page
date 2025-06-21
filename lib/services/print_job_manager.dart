@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 /// Service for managing print jobs and preventing multiple simultaneous prints.
 class PrintJobManager {
   bool _isPrinting = false;

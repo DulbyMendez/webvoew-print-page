@@ -1,14 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:printing/printing.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
-import 'dart:io';
 import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import './services/printer_service.dart';
 import './services/webview_communication_service.dart';
 import './services/print_job_manager.dart';
@@ -47,7 +41,6 @@ class _WebViewScreenState extends State<WebViewScreen> {
   late final WebViewCommunicationService _webViewService;
   late final PrintJobManager _printJobManager;
   late TestMethodsService _testMethodsService;
-  late ConfigService _configService;
 
   // WebView controller
   late final WebViewController _controller;
