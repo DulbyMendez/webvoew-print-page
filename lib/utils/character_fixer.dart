@@ -1,4 +1,23 @@
 // Archivo para funciones de normalización y corrección de caracteres.
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+/// Limpia el texto crudo que viene del WebView de Android.
+///
+/// Android puede enviar caracteres de escape como strings literales (p. ej., "\\n").
+/// Esta función los convierte a sus contrapartes reales.
+String cleanAndroidText(String text) {
+  // Aplicar solo si la plataforma es Android.
+  if (!kIsWeb && Platform.isAndroid) {
+    String cleanedText = text
+        .replaceAll(r'\\n', '\n') // Reemplaza la secuencia literal '\\n' por un salto de línea.
+        .replaceAll(r'\\r', '\r') // Reemplaza la secuencia literal '\\r' por un retorno de carro.
+        .replaceAll(r'\\t', '\t'); // Reemplaza la secuencia literal '\\t' por un tabulador.
+    return cleanedText;
+  }
+  // Si no es Android, devuelve el texto sin modificar.
+  return text;
+}
 
 /// Contiene funciones para la normalización y corrección de cadenas de texto
 /// antes de ser enviadas a la impresora.

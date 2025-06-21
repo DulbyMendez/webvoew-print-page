@@ -36,13 +36,17 @@ class PrinterService {
   /// This is the recommended method for printing Spanish text with accents and special characters.
   Future<void> printSpanish(String content, String title, String ip) async {
     try {
+      // Limpia el texto específicamente para problemas de Android ANTES de procesarlo.
+      final cleanTitle = cleanAndroidText(title);
+      final cleanContent = cleanAndroidText(content);
+
       final profile = await CapabilityProfile.load();
       final generator = Generator(PaperSize.mm80, profile);
       List<int> bytes = [];
 
-      // Use CP1252 for Spanish text (optimized for á, é, í, ó, ú, ñ, ¿, ¡)
+      // Usa el texto limpio con la codificación CP1252.
       bytes += generator.text(
-        title,
+        cleanTitle,
         styles: const PosStyles(
           align: PosAlign.center,
           bold: true,
@@ -58,7 +62,7 @@ class PrinterService {
         styles: const PosStyles(codeTable: 'CP1252'),
       );
       bytes += generator.text(
-        content,
+        cleanContent,
         styles: const PosStyles(codeTable: 'CP1252'),
       );
       bytes += generator.emptyLines(1);
