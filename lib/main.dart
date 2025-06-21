@@ -1,30 +1,220 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:printing/printing.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'dart:convert';
-import 'dart:typed_data';
+
 
 // Clase para manejar la conexión con impresoras de red
 class NetworkPrinter {
-  static const String printerIP = '192.168.1.13';
-  static const int printerPort =
-      9100; // Puerto estándar para impresoras ESC/POS
+  static const int printerPort = 9100; // Puerto estándar para impresoras ESC/POS
+
+  // Detectar si estamos en Android
+  static bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+  
+  // Detectar si estamos en macOS
+  static bool get _isMacOS => !kIsWeb && Platform.isMacOS;
+  
+  // Detectar si estamos en iOS
+  static bool get _isIOS => !kIsWeb && Platform.isIOS;
+
+  // Mapa de caracteres especiales para codificación CP437 (IBM437)
+  static const Map<String, int> _specialChars = {
+    // Vocales con acentos
+    'á': 0x85, 'é': 0x82, 'í': 0xA1, 'ó': 0xA2, 'ú': 0xA3,
+    'ñ': 0xA4, 'ü': 0x81, 'Á': 0xB5, 'É': 0x90, 'Í': 0xD6,
+    'Ó': 0xE0, 'Ú': 0xE9, 'Ñ': 0xA5, 'Ü': 0x9A,
+    
+    // Caracteres especiales españoles
+    '¡': 0xAD, '¿': 0xA8, '°': 0xF8, '€': 0xEE,
+    'ç': 0x87, 'Ç': 0x80, 'ß': 0xE1,
+    
+    // Otros caracteres especiales
+    '©': 0x9F, '®': 0xAE, '™': 0x99,
+    '¢': 0x9B, '£': 0x9C, '¥': 0x9D,
+    '§': 0x15, '¶': 0x14, '†': 0x86, '‡': 0x87,
+    '•': 0x07, '·': 0xFA, '¸': 0xFE,
+    '¹': 0xBC, '²': 0xB2, '³': 0xB3,
+    '¼': 0xBE, '½': 0xBD, '¾': 0xBF,
+    '×': 0xD8, '÷': 0xF6,
+    '±': 0xF1, '¬': 0xAA,
+    '≤': 0xFB, '≥': 0xFC, '≠': 0xF0,
+    '≈': 0xF7, '∞': 0xEC,
+    '∫': 0xF2, '∑': 0xE6,
+  };
+
+  // Función para convertir texto a bytes compatibles con ESC/POS
+  static List<int> _encodeTextForPrinter(String text) {
+    List<int> bytes = [];
+    
+    for (int i = 0; i < text.length; i++) {
+      String char = text[i];
+      
+      // Manejar saltos de línea
+      if (char == '\n') {
+        bytes.add(0x0A); // LF (Line Feed)
+        bytes.add(0x0D); // CR (Carriage Return)
+        continue;
+      }
+      
+      // Manejar tabulaciones
+      if (char == '\t') {
+        bytes.add(0x09); // HT (Horizontal Tab)
+        continue;
+      }
+      
+      // Buscar caracteres especiales en el mapa
+      if (_specialChars.containsKey(char)) {
+        bytes.add(_specialChars[char]!);
+        continue;
+      }
+      
+      // Para caracteres ASCII estándar (0-127)
+      int charCode = char.codeUnitAt(0);
+      if (charCode >= 32 && charCode <= 126) {
+        bytes.add(charCode);
+        continue;
+      }
+      
+      // Para caracteres no soportados, intentar mapeo alternativo
+      String fallbackChar = _getFallbackChar(char);
+      if (fallbackChar != char) {
+        bytes.addAll(_encodeTextForPrinter(fallbackChar));
+        continue;
+      }
+      
+      // Si no se puede mapear, usar un espacio
+      bytes.add(0x20);
+    }
+    
+    return bytes;
+  }
+
+  // Función para obtener caracteres de respaldo para caracteres no soportados
+  static String _getFallbackChar(String char) {
+    // Mapeo de caracteres similares para casos no cubiertos
+    const Map<String, String> fallbackMap = {
+      'à': 'a', 'è': 'e', 'ì': 'i', 'ò': 'o', 'ù': 'u',
+      'â': 'a', 'ê': 'e', 'î': 'i', 'ô': 'o', 'û': 'u',
+      'ã': 'a', 'õ': 'o',
+      'ä': 'a', 'ë': 'e', 'ï': 'i', 'ö': 'o',
+      'å': 'a', 'æ': 'ae', 'œ': 'oe',
+      'À': 'A', 'È': 'E', 'Ì': 'I', 'Ò': 'O', 'Ù': 'U',
+      'Â': 'A', 'Ê': 'E', 'Î': 'I', 'Ô': 'O', 'Û': 'U',
+      'Ã': 'A', 'Õ': 'O',
+      'Ä': 'A', 'Ë': 'E', 'Ï': 'I', 'Ö': 'O',
+      'Å': 'A', 'Æ': 'AE', 'Œ': 'OE',
+      // Caracteres específicos de macOS
+      '—': '-', '–': '-', '"': '"', '"': '"', ''': "'", ''': "'", '…': '...',
+    };
+    
+    return fallbackMap[char] ?? char;
+  }
+
+  // Función para limpiar y normalizar el texto antes de imprimir
+  static String _normalizeText(String text) {
+    // Limpiar caracteres problemáticos específicos de Android
+    if (_isAndroid) {
+      // En Android, los caracteres especiales pueden venir codificados de manera diferente
+      text = text.replaceAll(RegExp(r'\\n'), '\n'); // Convertir \n literal a salto real
+      text = text.replaceAll(RegExp(r'\\t'), '\t'); // Convertir \t literal a tab real
+      text = text.replaceAll(RegExp(r'\\r'), '\n'); // Convertir \r literal a salto real
+      
+      // Limpiar caracteres de escape adicionales que pueden venir de Android
+      text = text.replaceAll(RegExp(r'\\'), ''); // Eliminar barras invertidas extra
+      
+      // Manejar caracteres específicos de Android que pueden causar problemas
+      text = text.replaceAll('\\u00e1', 'á'); // á
+      text = text.replaceAll('\\u00e9', 'é'); // é
+      text = text.replaceAll('\\u00ed', 'í'); // í
+      text = text.replaceAll('\\u00f3', 'ó'); // ó
+      text = text.replaceAll('\\u00fa', 'ú'); // ú
+      text = text.replaceAll('\\u00f1', 'ñ'); // ñ
+      text = text.replaceAll('\\u00fc', 'ü'); // ü
+      text = text.replaceAll('\\u00a1', '¡'); // ¡
+      text = text.replaceAll('\\u00bf', '¿'); // ¿
+    }
+    
+    // Limpiar caracteres problemáticos específicos de macOS
+    if (_isMacOS) {
+      // En macOS, los caracteres pueden venir con codificación UTF-8 nativa
+      // pero las impresoras ESC/POS esperan CP437
+      
+      // Normalizar caracteres específicos de macOS
+      text = text.replaceAll('—', '-'); // Em dash a guión normal
+      text = text.replaceAll('–', '-'); // En dash a guión normal
+      text = text.replaceAll('"', '"'); // Smart quotes a comillas normales
+      text = text.replaceAll('"', '"'); // Smart quotes a comillas normales
+      text = text.replaceAll(''', "'"); // Smart apostrophe a apóstrofe normal
+      text = text.replaceAll(''', "'"); // Smart apostrophe a apóstrofe normal
+      text = text.replaceAll('…', '...'); // Ellipsis a tres puntos
+      
+      // Manejar caracteres de control específicos de macOS
+      text = text.replaceAll(RegExp(r'[\x00-\x1F\x7F-\x9F]'), '');
+      
+      // En macOS, los saltos de línea pueden venir como \r\n o \r
+      text = text.replaceAll(RegExp(r'\r\n|\r'), '\n');
+    }
+    
+    // Limpiar caracteres problemáticos específicos de iOS
+    if (_isIOS) {
+      // iOS puede tener comportamientos similares a macOS
+      text = text.replaceAll('—', '-');
+      text = text.replaceAll('–', '-');
+      text = text.replaceAll('"', '"');
+      text = text.replaceAll('"', '"');
+      text = text.replaceAll(''', "'");
+      text = text.replaceAll(''', "'");
+      text = text.replaceAll('…', '...');
+    }
+    
+    // Reemplazar múltiples espacios en blanco por uno solo
+    text = text.replaceAll(RegExp(r'\s+'), ' ');
+    
+    // Normalizar saltos de línea (Windows, Unix, Mac)
+    text = text.replaceAll(RegExp(r'\r\n|\r|\n'), '\n');
+    
+    // Eliminar caracteres de control excepto \n y \t
+    text = text.replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'), '');
+    
+    return text.trim();
+  }
+
+  // Función para debug: mostrar información de codificación
+  static void _debugEncoding(String originalText, String normalizedText, List<int> encodedBytes) {
+    print('🔍 DEBUG CODIFICACIÓN:');
+    print('📝 Texto original: "$originalText"');
+    print('📝 Texto normalizado: "$normalizedText"');
+    print('📝 Bytes codificados: ${encodedBytes.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(' ')}');
+    print('📝 Longitud original: ${originalText.length}, normalizada: ${normalizedText.length}, bytes: ${encodedBytes.length}');
+    
+    // Mostrar caracteres problemáticos
+    for (int i = 0; i < originalText.length; i++) {
+      String char = originalText[i];
+      int charCode = char.codeUnitAt(0);
+      if (charCode > 127 || char == '\n' || char == '\t') {
+        print('🔤 Carácter especial [$i]: "$char" (código: $charCode, hex: 0x${charCode.toRadixString(16)})');
+      }
+    }
+    
+    // Mostrar información específica de plataforma
+    if (_isMacOS) {
+      print('🍎 macOS detectado - usando normalización específica');
+    } else if (_isAndroid) {
+      print('🤖 Android detectado - usando normalización específica');
+    } else if (_isIOS) {
+      print('📱 iOS detectado - usando normalización específica');
+    }
+  }
 
   static Future<bool> printToNetworkPrinter(
     String content,
     String title, {
     Function(bool success)? onPrinted,
   }) async {
-    return await printToNetworkPrinterWithIP(
-      content,
-      title,
-      printerIP,
-      onPrinted: onPrinted,
-    );
+    // Esta función ya no se usa directamente, se debe usar printToNetworkPrinterWithIP
+    // con una IP específica obtenida de la configuración
+    throw UnimplementedError('Use printToNetworkPrinterWithIP with specific IP');
   }
 
   static Future<bool> printToNetworkPrinterWithIP(
@@ -37,6 +227,7 @@ class NetworkPrinter {
   }) async {
     try {
       print('🖨️ Conectando a impresora en $ip:$printerPort');
+      print('🌐 Plataforma detectada: ${_isAndroid ? 'Android' : _isMacOS ? 'macOS' : _isIOS ? 'iOS' : 'Otro'}');
 
       // Crear socket para conectar a la impresora
       final socket = await Socket.connect(
@@ -46,6 +237,10 @@ class NetworkPrinter {
       );
 
       print('✅ Conexión establecida con la impresora $ip');
+
+      // Normalizar el contenido antes de procesar
+      final String normalizedContent = _normalizeText(content);
+      final String normalizedTitle = _normalizeText(title);
 
       // Preparar comandos ESC/POS para la impresora
       final List<int> commands = [];
@@ -58,31 +253,37 @@ class NetworkPrinter {
 
       // Título en negrita
       commands.addAll([0x1B, 0x45, 0x01]); // ESC E 1 - Bold on
-      commands.addAll(utf8.encode('$title\n'));
+      final List<int> titleBytes = _encodeTextForPrinter('$normalizedTitle\n');
+      commands.addAll(titleBytes);
       commands.addAll([0x1B, 0x45, 0x00]); // ESC E 0 - Bold off
 
       // Información de copias si hay más de una
       if (totalCopies > 1) {
         commands.addAll([0x1B, 0x61, 0x00]); // ESC a 0 - Left alignment
-        commands.addAll(utf8.encode('Copia $copyNumber de $totalCopies\n'));
+        commands.addAll(_encodeTextForPrinter('Copia $copyNumber de $totalCopies\n'));
       }
 
       // Fecha
       commands.addAll([0x1B, 0x61, 0x00]); // ESC a 0 - Left alignment
-      commands.addAll(utf8.encode('Fecha: ${DateTime.now().toString()}\n'));
-      commands.addAll(utf8.encode('Impreso desde Flutter WebView\n'));
-      commands.addAll(utf8.encode('Impresora: $ip\n'));
+      final String currentDate = DateTime.now().toString().split('.')[0]; // Sin milisegundos
+      commands.addAll(_encodeTextForPrinter('Fecha: $currentDate\n'));
+      commands.addAll(_encodeTextForPrinter('Impreso desde Flutter WebView\n'));
+      commands.addAll(_encodeTextForPrinter('Impresora: $ip\n'));
 
       // Línea separadora arriba
-      commands.addAll(utf8.encode('${'=' * 30}\n'));
+      commands.addAll(_encodeTextForPrinter('${'=' * 30}\n'));
 
       // Contenido principal (textarea)
-      if (content.isNotEmpty) {
-        commands.addAll(utf8.encode(content + '\n'));
+      if (normalizedContent.isNotEmpty) {
+        final List<int> contentBytes = _encodeTextForPrinter('$normalizedContent\n');
+        commands.addAll(contentBytes);
+        
+        // Debug de codificación para el contenido principal
+        _debugEncoding(content, normalizedContent, contentBytes);
       }
 
       // Línea separadora abajo
-      commands.addAll(utf8.encode('${'=' * 30}\n'));
+      commands.addAll(_encodeTextForPrinter('${'=' * 30}\n'));
 
       // Finalizar documento
       commands.addAll([0x0C]); // Form feed
@@ -95,6 +296,8 @@ class NetworkPrinter {
       await socket.close();
 
       print('✅ Documento enviado exitosamente a la impresora $ip');
+      print('📝 Contenido normalizado enviado: "$normalizedContent"');
+      print('📊 Total de bytes enviados: ${commands.length}');
       if (onPrinted != null) onPrinted(true);
       return true;
     } catch (e) {
@@ -104,17 +307,17 @@ class NetworkPrinter {
     }
   }
 
-  static Future<bool> testConnection() async {
+  static Future<bool> testConnection(String ip) async {
     try {
       final socket = await Socket.connect(
-        printerIP,
+        ip,
         printerPort,
         timeout: const Duration(seconds: 5),
       );
       await socket.close();
       return true;
     } catch (e) {
-      print('❌ No se puede conectar a la impresora: $e');
+      print('❌ No se puede conectar a la impresora $ip: $e');
       return false;
     }
   }
@@ -438,7 +641,6 @@ class _WebViewScreenState extends State<WebViewScreen> {
       await _setPrintingStatus(true);
 
       final Map<String, dynamic> printData = json.decode(message);
-      final String html = printData['html'] ?? '';
       final String title = printData['title'] ?? 'Documento';
       final String url = printData['url'] ?? '';
       final String textContent = printData['textContent'] ?? '';
@@ -464,6 +666,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
 
       print('📝 Contenido final a imprimir: "$finalContent"');
 
+      if(!mounted) return;
       // Si no hay contenido, mostrar advertencia y salir
       if (finalContent.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -485,6 +688,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
           '🌐 Imprimiendo directamente desde WebView sin diálogo de confirmación',
         );
 
+        if(!mounted) return;
         // Mostrar notificación de que se está imprimiendo
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -629,6 +833,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
       );
 
       if (shouldPrint == true) {
+        if(!mounted) return;
         // Cerrar el diálogo de confirmación
         Navigator.of(context).pop();
 
@@ -640,9 +845,18 @@ class _WebViewScreenState extends State<WebViewScreen> {
           ),
         );
 
-        final bool isConnected = await NetworkPrinter.testConnection();
+        // Obtener configuración de impresoras para la prueba de conexión
+        final List<Map<String, dynamic>> printers = await _getPrintersConfig();
+        String testIP = '192.168.1.13'; // IP por defecto
+        
+        if (printers.isNotEmpty) {
+          testIP = printers[0]['ip'];
+        }
+        
+        final bool isConnected = await NetworkPrinter.testConnection(testIP);
 
         if (!isConnected) {
+          if(!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
@@ -656,6 +870,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
           return;
         }
 
+        if(!mounted) return;
         // Enviar documento a la impresora
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -684,6 +899,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
       }
     } catch (e) {
       print('❌ Error al procesar impresión nativa: $e');
+      if(!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error al procesar impresión: $e'),
@@ -720,6 +936,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
         return;
       }
 
+      if(!mounted) return;
       // Mostrar notificación de que se está imprimiendo
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1169,8 +1386,15 @@ class _WebViewScreenState extends State<WebViewScreen> {
         print(
           '⚠️ No se encontraron impresoras configuradas, usando impresora por defecto',
         );
-        // Usar impresora por defecto
-        await NetworkPrinter.printToNetworkPrinter(content, title);
+        // Usar impresora por defecto (IP local común)
+        const String defaultIP = '192.168.1.13';
+        await NetworkPrinter.printToNetworkPrinterWithIP(
+          content,
+          title,
+          defaultIP,
+          copyNumber: 1,
+          totalCopies: 1,
+        );
         return;
       }
 
@@ -1216,6 +1440,7 @@ class _WebViewScreenState extends State<WebViewScreen> {
         '📊 Resumen: $successCount copias impresas exitosamente de $totalCopies total',
       );
 
+      if(!mounted) return;
       // Mostrar notificación de resumen
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1266,6 +1491,11 @@ class _WebViewScreenState extends State<WebViewScreen> {
     }
   }
 
+  void safeUseContext(void Function(BuildContext context) action) {
+    if (!mounted) return;
+    action(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
@@ -1282,17 +1512,28 @@ class _WebViewScreenState extends State<WebViewScreen> {
           IconButton(
             icon: const Icon(Icons.print),
             onPressed: () async {
-              final bool isConnected = await NetworkPrinter.testConnection();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    isConnected
-                        ? '✅ Conexión exitosa con impresora 192.168.1.13:9100'
-                        : '❌ No se puede conectar a la impresora 192.168.1.13:9100',
+              // Obtener configuración de impresoras
+              final List<Map<String, dynamic>> printers = await _getPrintersConfig();
+              String testIP = '192.168.1.13'; // IP por defecto
+              
+              if (printers.isNotEmpty) {
+                testIP = printers[0]['ip'];
+              }
+              
+              final bool isConnected = await NetworkPrinter.testConnection(testIP);
+              if(!mounted) return;
+              safeUseContext((ctx){
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      isConnected
+                          ? '✅ Conexión exitosa con impresora $testIP:9100'
+                          : '❌ No se puede conectar a la impresora $testIP:9100',
+                    ),
+                    backgroundColor: isConnected ? Colors.green : Colors.red,
                   ),
-                  backgroundColor: isConnected ? Colors.green : Colors.red,
-                ),
-              );
+                );
+              });
             },
             tooltip: 'Probar conexión con impresora',
           ),
