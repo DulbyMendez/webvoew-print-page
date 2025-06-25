@@ -176,40 +176,4 @@ class PrinterService {
       throw e;
     }
   }
-
-  /// Runs a series of tests to find a compatible character encoding.
-  Future<Map<String, bool>> testCharacterStrategies(String ip) async {
-    final Map<String, bool> results = {};
-    final List<String> codeTables = ['CP437', 'CP850', 'CP858', 'CP1252'];
-    final String testText = 'Prueba: á, é, í, ó, ú, Ñ, ¿¡';
-
-    for (final codeTable in codeTables) {
-      try {
-        final profile = await CapabilityProfile.load();
-        final generator = Generator(PaperSize.mm80, profile);
-        List<int> bytes = [];
-        bytes += generator.text(
-          'Probando $codeTable...\n$testText',
-          styles: PosStyles(codeTable: codeTable),
-        );
-        bytes += generator.cut();
-
-        final socket = await Socket.connect(
-          ip,
-          printerPort,
-          timeout: const Duration(seconds: 3),
-        );
-        socket.add(bytes);
-        await socket.flush();
-        socket.close();
-        results[codeTable] = true;
-        print('✅ Estrategia $codeTable funcionó.');
-        await Future.delayed(const Duration(seconds: 1));
-      } catch (e) {
-        results[codeTable] = false;
-        print('❌ Estrategia $codeTable falló: $e');
-      }
-    }
-    return results;
-  }
 }

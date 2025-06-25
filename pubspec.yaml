@@ -1,5 +1,5 @@
 name: flutter_print_web
-description: "A new Flutter project."
+description: "Sistema de impresión WebView Flutter simplificado"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -31,17 +31,18 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
+  # UI components
   cupertino_icons: ^1.0.8
+  
+  # WebView functionality
   webview_flutter: ^4.0.0
-  printing: ^5.11.1
-  path_provider: ^2.1.1
-  http: ^1.1.0
-  socket_io_client: ^2.0.3+1
-  printer_plus: ^1.0.0
+  
+  # Printer functionality
   esc_pos_utils_plus: ^2.0.4
+  
+  # Configuration storage
   shared_preferences: ^2.2.2
+  path_provider: ^2.1.1
 
 dev_dependencies:
   flutter_test:

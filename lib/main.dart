@@ -294,29 +294,14 @@ class _WebViewScreenState extends State<WebViewScreen> {
             tooltip: 'Configurar caracteres',
           ),
           IconButton(
-            icon: const Icon(Icons.build),
-            onPressed: () => _testMethodsService.runDiagnostic(),
-            tooltip: 'Diagnóstico completo',
+            icon: const Icon(Icons.play_arrow),
+            onPressed: () => _webViewService.sendTestPrintRequest(),
+            tooltip: 'Probar función de impresión',
           ),
           IconButton(
-            icon: const Icon(Icons.bug_report),
-            onPressed: () => _webViewService.runDiagnostic(),
-            tooltip: 'Diagnóstico de página web',
-          ),
-          IconButton(
-            icon: const Icon(Icons.touch_app),
-            onPressed: () => _webViewService.testManualPrint(),
-            tooltip: 'Probar botón manualmente',
-          ),
-          IconButton(
-            icon: const Icon(Icons.code),
-            onPressed: () => _webViewService.debugInjection(),
-            tooltip: 'Depurar inyección JS',
-          ),
-          IconButton(
-            icon: const Icon(Icons.web),
-            onPressed: () => _webViewService.forceWebViewDetection(),
-            tooltip: 'Forzar detección WebView',
+            icon: const Icon(Icons.help),
+            onPressed: () => _webViewService.getFunctionUsage(),
+            tooltip: 'Información de uso',
           ),
           IconButton(
             icon: const Icon(Icons.settings_applications),

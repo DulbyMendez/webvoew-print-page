@@ -7,12 +7,12 @@ class WebViewCommunicationService {
 
   WebViewCommunicationService(this._controller);
 
-  /// Injects the print interceptor script into the WebView.
+  /// Injects the simplified print function script into the WebView.
   Future<void> injectPrintInterceptor() async {
     try {
       final script = JavaScriptInjectionService.getPrintInterceptorScript();
       await _controller.runJavaScript(script);
-      print('✅ Script de interceptor de impresión inyectado');
+      print('✅ Script de función de impresión simplificado inyectado');
     } catch (e) {
       print('❌ Error inyectando script de impresión: $e');
     }
@@ -99,16 +99,25 @@ class WebViewCommunicationService {
     }
   }
 
-  /// Runs a diagnostic script to inspect the page structure.
-  Future<void> runDiagnostic() async {
+  /// Tests the print function with sample data.
+  Future<void> testPrintFunction() async {
     try {
-      final script = JavaScriptInjectionService.getDiagnosticScript();
-      await _controller.runJavaScript(script);
-      print(
-        '✅ Diagnóstico de página ejecutado. Revisa la consola del WebView.',
-      );
+      final script = JavaScriptInjectionService.getTestPrintFunctionScript();
+      final result = await _controller.runJavaScriptReturningResult(script);
+      print('🧪 Resultado de prueba de función de impresión: $result');
     } catch (e) {
-      print('❌ Error ejecutando diagnóstico: $e');
+      print('❌ Error en prueba de función de impresión: $e');
+    }
+  }
+
+  /// Gets usage information for the print function.
+  Future<void> getFunctionUsage() async {
+    try {
+      final script = JavaScriptInjectionService.getFunctionUsageScript();
+      final result = await _controller.runJavaScriptReturningResult(script);
+      print('📖 Información de uso de función de impresión: $result');
+    } catch (e) {
+      print('❌ Error obteniendo información de uso: $e');
     }
   }
 
@@ -119,28 +128,6 @@ class WebViewCommunicationService {
       print('✅ WebView recargado');
     } catch (e) {
       print('❌ Error recargando WebView: $e');
-    }
-  }
-
-  /// Runs a debug script to check JavaScript injection status.
-  Future<void> debugInjection() async {
-    try {
-      final script = JavaScriptInjectionService.getDebugInjectionScript();
-      final result = await _controller.runJavaScriptReturningResult(script);
-      print('🔧 Resultado de depuración: $result');
-    } catch (e) {
-      print('❌ Error en depuración: $e');
-    }
-  }
-
-  /// Runs a manual test of the print button functionality.
-  Future<void> testManualPrint() async {
-    try {
-      final script = JavaScriptInjectionService.getManualPrintTestScript();
-      final result = await _controller.runJavaScriptReturningResult(script);
-      print('🧪 Resultado de prueba manual: $result');
-    } catch (e) {
-      print('❌ Error en prueba manual: $e');
     }
   }
 
@@ -190,15 +177,40 @@ class WebViewCommunicationService {
     }
   }
 
-  /// Forces WebView detection for Flutter to enable print button.
-  Future<void> forceWebViewDetection() async {
+  /// Sends a test print request to the WebView.
+  Future<void> sendTestPrintRequest() async {
     try {
-      final script =
-          JavaScriptInjectionService.getForceWebViewDetectionScript();
+      final script = '''
+        (function() {
+          console.log('🧪 ENVIANDO SOLICITUD DE IMPRESIÓN DE PRUEBA');
+          
+          const testData = {
+            content: "Este es un texto de prueba para verificar que la función de impresión funciona correctamente. Incluye caracteres especiales: á, é, í, ó, ú, ñ, ¿, ¡",
+            title: "Prueba de Impresión desde Flutter",
+            printers: [
+              { ip: "192.168.1.100", copies: 1 },
+              { ip: "192.168.1.101", copies: 2 }
+            ]
+          };
+          
+          console.log('📋 Datos de prueba:', testData);
+          
+          if (typeof callDirectPrint === 'function') {
+            callDirectPrint(testData);
+            return 'Solicitud de impresión de prueba enviada';
+          } else if (typeof window.NativePrinter !== 'undefined') {
+            window.NativePrinter.postMessage(JSON.stringify(testData));
+            return 'Solicitud de impresión de prueba enviada via NativePrinter';
+          } else {
+            return 'Error: No se encontró función de impresión disponible';
+          }
+        })();
+      ''';
+
       final result = await _controller.runJavaScriptReturningResult(script);
-      print('🔍 Resultado de forzar detección: $result');
+      print('🧪 Resultado de solicitud de prueba: $result');
     } catch (e) {
-      print('❌ Error forzando detección: $e');
+      print('❌ Error enviando solicitud de prueba: $e');
     }
   }
 }
