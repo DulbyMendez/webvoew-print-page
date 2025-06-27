@@ -118,4 +118,73 @@ class PrintJobManager {
    Timestamp: ${DateTime.now().toIso8601String()}
 ''';
   }
+
+  /// Validates invoice data specifically for invoice printing.
+  static bool validateInvoiceData({
+    required String content,
+    required String title,
+    required List<Map<String, dynamic>> printers,
+  }) {
+    // Validar datos básicos
+    if (!validatePrintData(content: content, printers: printers)) {
+      return false;
+    }
+
+    // Validar título
+    if (title.trim().isEmpty) {
+      print('❌ Validación de factura fallida: título vacío');
+      return false;
+    }
+
+    // Verificar si contiene elementos de factura
+    final hasInvoiceElements =
+        content.contains('FACTURA') ||
+        content.contains('NIT:') ||
+        content.contains('TOTAL:') ||
+        content.contains('SUBTOTAL:');
+
+    if (!hasInvoiceElements) {
+      print('⚠️ Advertencia: El contenido no parece ser una factura');
+    }
+
+    // Verificar si contiene imagen QR
+    final hasQRImage = content.contains('<imagen_grande>');
+    if (hasQRImage) {
+      print('✅ Factura con imagen QR detectada');
+    } else {
+      print('⚠️ Advertencia: No se detectó imagen QR en la factura');
+    }
+
+    print('✅ Validación de factura exitosa');
+    return true;
+  }
+
+  /// Formats invoice job information for logging.
+  static String formatInvoiceJobInfo({
+    required String title,
+    required String content,
+    required List<Map<String, dynamic>> printers,
+  }) {
+    final totalCopies = printers.fold<int>(
+      0,
+      (sum, printer) => sum + (printer['copies'] as int),
+    );
+
+    final hasQRImage = content.contains('<imagen_grande>');
+    final hasInvoiceElements =
+        content.contains('FACTURA') ||
+        content.contains('NIT:') ||
+        content.contains('TOTAL:');
+
+    return '''
+🧾 Información del trabajo de impresión de factura:
+   Título: $title
+   Contenido: ${content.length} caracteres
+   Impresoras: ${printers.length}
+   Copias totales: $totalCopies
+   Contiene QR: ${hasQRImage ? 'Sí' : 'No'}
+   Elementos de factura: ${hasInvoiceElements ? 'Sí' : 'No'}
+   Timestamp: ${DateTime.now().toIso8601String()}
+''';
+  }
 }

@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'printer_service.dart';
+import '../utils/character_fixer.dart';
+import 'webview_communication_service.dart';
 
 /// Service for handling basic printer test methods.
 class TestMethodsService {
   final PrinterService _printerService;
   final BuildContext _context;
+  final WebViewCommunicationService? _webViewService;
 
-  TestMethodsService(this._printerService, this._context);
+  TestMethodsService(
+    this._printerService,
+    this._context, [
+    this._webViewService,
+  ]);
 
   /// Tests the connection to the printer.
   Future<void> testConnection() async {
@@ -22,13 +29,33 @@ class TestMethodsService {
     );
   }
 
+  /// Tests invoice printing using IP from web.
+  Future<void> testInvoiceWithWebIP() async {
+    if (_webViewService == null) {
+      _showSnackBar('❌ Servicio WebView no disponible', Colors.red);
+      return;
+    }
+
+    _showSnackBar('🧾 Probando factura con IP de web...', Colors.blue);
+
+    try {
+      await _webViewService!.sendTestInvoiceRequestWithWebIP();
+      _showSnackBar(
+        '✅ Solicitud de factura con IP de web enviada',
+        Colors.green,
+      );
+    } catch (e) {
+      _showSnackBar('❌ Error enviando factura con IP de web: $e', Colors.red);
+    }
+  }
+
   /// Tests Latin1 printing with Spanish characters.
   Future<void> testLatin1Print() async {
     _showSnackBar('🖨️ Probando impresión Latin1...', Colors.blue);
 
     try {
       await _printerService.printLatin1(
-        '¡Hola mundo con acentos y eñes!\nPrueba de impresión con CP1252 (Latin1).\nDebería funcionar correctamente. 🤓\nFecha: ${DateTime.now().toString()}',
+        '¡Hola mundo con acentos y eñes!\nPrueba de impresión con CP1252 (Latin1).\nDebería funcionar correctamente.\nFecha: ${DateTime.now().toString()}',
         'Prueba Latin1',
         PrinterService.printerIP,
       );
@@ -51,6 +78,32 @@ class TestMethodsService {
       _showSnackBar('✅ Impresión rápida exitosa', Colors.green);
     } catch (e) {
       _showSnackBar('❌ Error en impresión rápida: $e', Colors.red);
+    }
+  }
+
+  /// Tests character normalization.
+  Future<void> testCharacterNormalization() async {
+    _showSnackBar('🧪 Probando normalización de caracteres...', Colors.blue);
+
+    try {
+      // Texto con emojis y caracteres problemáticos
+      final testText =
+          '¡Hola mundo con acentos y eñes! 🤓\nPrueba de impresión con CP1252 (Latin1).\nDebería funcionar correctamente. 😊\nFecha: ${DateTime.now().toString()}';
+
+      // Probar normalización
+      final normalizedText = normalizeSpanishText(testText);
+
+      print('📝 Texto original: $testText');
+      print('📝 Texto normalizado: $normalizedText');
+
+      await _printerService.printLatin1(
+        normalizedText,
+        'Prueba Normalización',
+        PrinterService.printerIP,
+      );
+      _showSnackBar('✅ Prueba de normalización exitosa', Colors.green);
+    } catch (e) {
+      _showSnackBar('❌ Error en prueba de normalización: $e', Colors.red);
     }
   }
 

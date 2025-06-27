@@ -34,8 +34,8 @@ callDirectPrint({
     content: "Texto a imprimir",
     title: "Título de impresión",
     printers: [
-        { ip: "192.168.1.100", copies: 2 },
-        { ip: "192.168.1.101", copies: 1 }
+        { ip: "192.168.1.13", copies: 2 },
+        { ip: "192.168.1.8", copies: 1 }
     ]
 });
 ```
@@ -48,8 +48,8 @@ printToNative(
     "Texto a imprimir",
     "Título de impresión", 
     [
-        { ip: "192.168.1.100", copies: 2 },
-        { ip: "192.168.1.101", copies: 1 }
+        { ip: "192.168.1.13", copies: 2 },
+        { ip: "192.168.1.8", copies: 1 }
     ]
 );
 ```
@@ -62,8 +62,8 @@ window.NativePrinter.postMessage(JSON.stringify({
     content: "Texto a imprimir",
     title: "Título de impresión",
     printers: [
-        { ip: "192.168.1.100", copies: 2 },
-        { ip: "192.168.1.101", copies: 1 }
+        { ip: "192.168.1.13", copies: 2 },
+        { ip: "192.168.1.8", copies: 1 }
     ]
 }));
 ```
@@ -80,7 +80,7 @@ window.NativePrinter.postMessage(JSON.stringify({
 
 ```javascript
 {
-    ip: "192.168.1.100",    // IP de la impresora (string)
+    ip: "192.168.1.13",    // IP de la impresora (string)
     copies: 2               // Número de copias (number >= 1)
 }
 ```
@@ -208,8 +208,8 @@ function imprimirDocumento() {
         content: "Este es un documento de prueba con caracteres especiales: á, é, í, ó, ú, ñ, ¿, ¡",
         title: "Documento de Prueba",
         printers: [
-            { ip: "192.168.1.100", copies: 1 },
-            { ip: "192.168.1.101", copies: 2 }
+            { ip: "192.168.1.13", copies: 1 },
+            { ip: "192.168.1.8", copies: 2 }
         ]
     };
     

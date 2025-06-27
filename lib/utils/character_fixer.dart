@@ -51,7 +51,7 @@ String normalizeText(String text) {
 }
 
 /// Normaliza un texto reemplazando solo los caracteres que comúnmente
-/// causan problemas en impresoras (puntuación especial, símbolos),
+/// causan problemas en impresoras (puntuación especial, símbolos, emojis),
 /// pero intenta preservar los caracteres acentuados del español.
 String normalizeSpanishText(String text) {
   if (text.isEmpty) return text;
@@ -99,6 +99,10 @@ String normalizeSpanishText(String text) {
     normalized = normalized.replaceAll(special, replacement);
   });
 
+  // Remover emojis y caracteres Unicode no compatibles con CP1252
+  // Usar un enfoque más simple y seguro
+  normalized = _removeUnicodeCharacters(normalized);
+
   // Limpiar caracteres no imprimibles (control characters)
   normalized = normalized.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '');
 
@@ -109,4 +113,23 @@ String normalizeSpanishText(String text) {
   normalized = normalized.trim();
 
   return normalized;
+}
+
+/// Función auxiliar para remover caracteres Unicode de forma segura
+String _removeUnicodeCharacters(String text) {
+  String result = '';
+  for (int i = 0; i < text.length; i++) {
+    int code = text.codeUnitAt(i);
+    // Solo mantener caracteres en el rango CP1252 (0x00-0xFF)
+    if (code <= 0xFF) {
+      result += text[i];
+    }
+    // Para caracteres Unicode que requieren 2 code units (surrogate pairs)
+    else if (code >= 0xD800 && code <= 0xDBFF && i + 1 < text.length) {
+      // Es el primer code unit de un surrogate pair, saltar al siguiente
+      i++;
+    }
+    // Para otros caracteres Unicode, simplemente omitirlos
+  }
+  return result;
 }
