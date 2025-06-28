@@ -436,9 +436,7 @@ class WebViewCommunicationService {
       final result = await _controller.runJavaScriptReturningResult(script);
       print('📝 Resultado de procesamiento de textarea: $result');
 
-      if (result != null &&
-          result is Map<String, dynamic> &&
-          result['success'] == true) {
+      if (result is Map<String, dynamic> && result['success'] == true) {
         // Procesar el contenido y enviarlo para impresión
         await _sendProcessedContentToPrint(result);
       } else {
