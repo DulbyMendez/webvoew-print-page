@@ -39,7 +39,7 @@ class TestMethodsService {
     _showSnackBar('🧾 Probando factura con IP de web...', Colors.blue);
 
     try {
-      await _webViewService!.sendTestInvoiceRequestWithWebIP();
+      await _webViewService.sendTestInvoiceRequestWithWebIP();
       _showSnackBar(
         '✅ Solicitud de factura con IP de web enviada',
         Colors.green,

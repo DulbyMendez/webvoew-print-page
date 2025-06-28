@@ -103,6 +103,11 @@ class _WebViewScreenState extends State<WebViewScreen> {
         _webViewService,
       );
     });
+
+    // Activar procesamiento automático de textarea
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _webViewService.activateTextareaAutoProcessing();
+    });
   }
 
   /// Loads saved configuration from persistent storage.
@@ -664,6 +669,16 @@ class _WebViewScreenState extends State<WebViewScreen> {
               await PrinterService.printTestQrSimple('192.168.1.13');
             },
             tooltip: 'Imprimir QR de prueba',
+          ),
+          IconButton(
+            icon: const Icon(Icons.text_fields),
+            onPressed: () => _webViewService.processTextareaContent(),
+            tooltip: 'Procesar textarea para impresión',
+          ),
+          IconButton(
+            icon: const Icon(Icons.auto_fix_high),
+            onPressed: () => _webViewService.activateTextareaAutoProcessing(),
+            tooltip: 'Activar procesamiento automático',
           ),
 
           // Separador visual

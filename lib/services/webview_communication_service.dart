@@ -223,7 +223,7 @@ class WebViewCommunicationService {
 
       final result = await _controller.runJavaScriptReturningResult(script);
       print('📡 IP de impresora obtenida desde web: $result');
-      return result?.toString();
+      return result.toString();
     } catch (e) {
       print('❌ Error obteniendo IP de impresora desde web: $e');
       return '192.168.1.13'; // IP por defecto en caso de error
@@ -354,6 +354,164 @@ class WebViewCommunicationService {
       print('🧾 Resultado de prueba de factura: $result');
     } catch (e) {
       print('❌ Error al probar factura con QR pequeño: $e');
+    }
+  }
+
+  /// Procesa texto desde textarea y lo convierte al formato de impresión.
+  /// Detecta automáticamente si es una factura y aplica el formato correspondiente.
+  Future<void> processTextareaContent() async {
+    try {
+      print('📝 Procesando contenido del textarea...');
+
+      final script = '''
+        (function() {
+          console.log('🔍 Buscando textarea en la página...');
+          
+          // Buscar textarea por diferentes selectores
+          const textarea = document.querySelector('textarea') ||
+                          document.querySelector('#content') ||
+                          document.querySelector('.content') ||
+                          document.querySelector('[name="content"]') ||
+                          document.querySelector('[placeholder*="factura"]') ||
+                          document.querySelector('[placeholder*="contenido"]');
+          
+          if (!textarea) {
+            console.log('❌ No se encontró textarea en la página');
+            return {
+              success: false,
+              error: 'No se encontró textarea en la página'
+            };
+          }
+          
+          const content = textarea.value.trim();
+          if (!content) {
+            console.log('❌ El textarea está vacío');
+            return {
+              success: false,
+              error: 'El textarea está vacío'
+            };
+          }
+          
+          console.log('✅ Contenido encontrado en textarea:', content.length + ' caracteres');
+          
+          // Detectar si es una factura
+          const isInvoice = content.includes('FACTURA') ||
+                           content.includes('NIT:') ||
+                           content.includes('TOTAL:') ||
+                           content.includes('SUBTOTAL:') ||
+                           content.includes('Cliente:') ||
+                           content.includes('Fecha:');
+          
+          // Extraer título de la primera línea
+          const lines = content.split('\\n');
+          let title = 'Documento';
+          for (const line of lines) {
+            if (line.trim() && !line.trim().startsWith('<')) {
+              title = line.trim();
+              break;
+            }
+          }
+          
+          // Obtener IP de impresora
+          const printerIP = document.querySelector('.printer-ip')?.value ||
+                           document.querySelector('#printer-ip')?.value ||
+                           '192.168.1.13';
+          
+          console.log('📋 Información extraída:');
+          console.log('   - Título:', title);
+          console.log('   - Es factura:', isInvoice);
+          console.log('   - IP impresora:', printerIP);
+          
+          return {
+            success: true,
+            content: content,
+            title: title,
+            isInvoice: isInvoice,
+            printerIP: printerIP,
+            contentLength: content.length
+          };
+        })();
+      ''';
+
+      final result = await _controller.runJavaScriptReturningResult(script);
+      print('📝 Resultado de procesamiento de textarea: $result');
+
+      if (result != null &&
+          result is Map<String, dynamic> &&
+          result['success'] == true) {
+        // Procesar el contenido y enviarlo para impresión
+        await _sendProcessedContentToPrint(result);
+      } else {
+        final error =
+            result is Map<String, dynamic>
+                ? result['error']
+                : 'Error desconocido';
+        print('❌ Error procesando textarea: $error');
+      }
+    } catch (e) {
+      print('❌ Error al procesar contenido del textarea: $e');
+    }
+  }
+
+  /// Activa el procesamiento automático de textarea.
+  /// Crea un botón flotante y detecta cambios automáticamente.
+  Future<void> activateTextareaAutoProcessing() async {
+    try {
+      print('🔧 Activando procesamiento automático de textarea...');
+
+      final script =
+          JavaScriptInjectionService.getTextareaAutoProcessingScript();
+      final result = await _controller.runJavaScriptReturningResult(script);
+      print('✅ Procesamiento automático de textarea activado: $result');
+    } catch (e) {
+      print('❌ Error activando procesamiento automático de textarea: $e');
+    }
+  }
+
+  /// Envía el contenido procesado para impresión.
+  Future<void> _sendProcessedContentToPrint(Map<String, dynamic> data) async {
+    try {
+      final content = data['content'] as String;
+      final title = data['title'] as String;
+      final isInvoice = data['isInvoice'] as bool;
+      final printerIP = data['printerIP'] as String;
+
+      print('🖨️ Enviando contenido procesado para impresión:');
+      print('   - Título: $title');
+      print('   - Tipo: ${isInvoice ? 'Factura' : 'Documento'}');
+      print('   - IP: $printerIP');
+      print('   - Contenido: ${content.length} caracteres');
+
+      final script = '''
+        (function() {
+          console.log('🖨️ Enviando contenido procesado para impresión...');
+          
+          const printData = {
+            printers: [
+              {
+                ip: '${printerIP}',
+                copies: 1,
+                content: `${content.replaceAll('`', '\\`').replaceAll('\$', '\\\$')}`,
+                title: '${title.replaceAll("'", "\\'")}'
+              }
+            ]
+          };
+          
+          console.log('📋 Datos de impresión:', printData);
+          
+          if (typeof callDirectPrint === 'function') {
+            callDirectPrint(printData);
+            return 'Contenido enviado para impresión exitosamente';
+          } else {
+            return 'Error: Función callDirectPrint no disponible';
+          }
+        })();
+      ''';
+
+      final result = await _controller.runJavaScriptReturningResult(script);
+      print('✅ Resultado de envío para impresión: $result');
+    } catch (e) {
+      print('❌ Error enviando contenido procesado para impresión: $e');
     }
   }
 
